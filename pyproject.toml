@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "openai>=1.84.0",
-    "reloading>=1.1.2",
+    "python-dotenv>=1.0.0",
     "selenium>=4.33.0",
     "webdriver-manager>=4.0.2",
 ]

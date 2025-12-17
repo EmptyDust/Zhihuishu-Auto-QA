@@ -8,49 +8,52 @@ First, install the required dependencies.
 
 ```sh
 uv venv
-.venv\Scripts\activate
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
 uv sync
 ```
 
 ## Configuration
 
-### 1. API Key Configuration
+Copy `.env.example` to `.env` and fill in your configuration:
 
-Complete the `secret.py.example` file with your API key for the platform you are using for `api_key`.\
-Then copy or rename the file to `secret.py`.
-
-### 2. Platform Selection
-
-The script supports two AI platforms: **deepseek** and **siliconflow**.
-
-To switch platforms, edit `main.py` and modify line 65:
-
-```python
-provider = ["deepseek", "siliconflow"][0]  # 切换平台, 须在config.json文件中平台相关配置
+```sh
+cp .env.example .env
 ```
 
-- Use `[0]` for **deepseek**
-- Use `[1]` for **siliconflow**
+`.env` file content:
 
-**Note:** Make sure the corresponding platform configuration exists in `config.json`. The default `config.json` includes configurations for both platforms:
+```env
+API_KEY=your_api_key_here
+BASE_URL=https://api.deepseek.com/v1
+MODEL_NAME=deepseek-chat
 
-```json
-{
-  "deepseek": {
-    "base_url": "https://api.deepseek.com/v1",
-    "model_name": "deepseek-chat"
-  },
-  "siliconflow": {
-    "base_url": "https://api.siliconflow.cn/v1",
-    "model_name": "deepseek-ai/DeepSeek-V3"
-  }
-}
+# Optional: proxy for downloading driver
+# PROXY=http://127.0.0.1:7890
 ```
+
+### Supported Platforms
+
+Any OpenAI-compatible API is supported. Common examples:
+
+| Platform | BASE_URL | MODEL_NAME |
+|----------|----------|------------|
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| SiliconFlow | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
+
+### Edge Driver
+
+The script uses Microsoft Edge browser. Driver loading:
+
+1. First tries local driver (`msedgedriver.exe` on Windows, `msedgedriver` on macOS/Linux)
+2. If local driver fails, downloads automatically via `webdriver-manager`
+3. Set `PROXY` in `.env` if you need a proxy for downloading
 
 ## Usage
 
 We suggest responding to questions before asking new ones, because you cannot respond to questions that were asked by yourself.
 
 ```bash
-uv run .\main.py
+uv run main.py
 ```

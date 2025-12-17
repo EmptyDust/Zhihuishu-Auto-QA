@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import time
 import sys
-import json
 import os
-import io
 import random
+from dotenv import load_dotenv
+
+load_dotenv()
 # 设置默认编码为 UTF-8，解决 Windows 上的编码问题
 if sys.platform == 'win32':
     import locale
@@ -15,39 +16,6 @@ if sys.platform == 'win32':
         sys.stderr.reconfigure(encoding='utf-8')
     # 设置环境变量，让文件读取使用 UTF-8
     os.environ['PYTHONIOENCODING'] = 'utf-8'
-# 修复 reloading 库在 Windows 上的编码问题（必须在导入 reloading 装饰器之前执行）
-if sys.platform == 'win32':
-    import importlib
-    
-    def patch_reloading_module():
-        """修补 reloading 模块的 load_file 函数"""
-        try:
-            # 导入 reloading.reloading 模块
-            reloading_module = importlib.import_module('reloading.reloading')
-            # 替换 load_file 函数为使用 UTF-8 编码的版本
-            if hasattr(reloading_module, 'load_file'):
-                def load_file_utf8(path):
-                    """使用 UTF-8 编码读取文件，修复 Windows 上的编码问题"""
-                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                        return f.read()
-                # 直接替换函数
-                reloading_module.load_file = load_file_utf8
-                return True
-        except Exception as e:
-            print(f"警告: 无法修复 reloading 库的编码问题: {e}")
-            return False
-    
-    # 先导入 reloading 包
-    import reloading
-    # 修补模块
-    if patch_reloading_module():
-        print("已修复 reloading 库的编码问题")
-    
-from reloading import reloading
-
-# 导入装饰器后再次确保修补（防止模块被重新加载）
-if sys.platform == 'win32':
-    patch_reloading_module()
 from selenium.webdriver import Edge
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -57,22 +25,50 @@ from selenium.webdriver.edge.options import Options
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from openai import OpenAI
 
-from secret import api_key
-
-with open("./config.json") as f:
-    config = json.load(f)
-
-provider = ["deepseek", "siliconflow"][0]  # 切换平台, 须在config.json文件中平台相关配置
-base_url = config[provider]["base_url"]
-model_name = config[provider]["model_name"]
+api_key = os.getenv("API_KEY")
+base_url = os.getenv("BASE_URL")
+model_name = os.getenv("MODEL_NAME")
 
 print("正在启动浏览器")
 options = Options()
 options.add_argument("--disable-logging")
 options.add_argument("--log-level=OFF")
-# 使用本地的 msedgedriver.exe
-driver_path = os.path.join(os.path.dirname(__file__), "msedgedriver.exe")
-driver = Edge(service=Service(executable_path=driver_path, log_path="nul"), options=options)
+
+# 根据平台选择本地驱动文件名和日志路径
+if sys.platform == 'win32':
+    local_driver_name = "msedgedriver.exe"
+    log_path = "nul"
+else:
+    local_driver_name = "msedgedriver"
+    log_path = "/dev/null"
+
+driver_path = os.path.join(os.path.dirname(__file__), local_driver_name)
+
+# 先尝试本地驱动，失败则联网下载
+driver = None
+if os.path.exists(driver_path):
+    try:
+        print(f"尝试使用本地驱动: {driver_path}")
+        driver = Edge(service=Service(executable_path=driver_path, log_path=log_path), options=options)
+        print("本地驱动加载成功")
+    except Exception as e:
+        print(f"本地驱动加载失败: {e}")
+        driver = None
+
+if driver is None:
+    print("正在联网下载驱动...")
+    proxy = os.getenv("PROXY")
+    if proxy:
+        os.environ['http_proxy'] = proxy
+        os.environ['https_proxy'] = proxy
+        print(f"使用代理: {proxy}")
+    try:
+        driver_path = EdgeChromiumDriverManager().install()
+        driver = Edge(service=Service(executable_path=driver_path, log_path=log_path), options=options)
+        print("驱动下载并加载成功")
+    except Exception as e:
+        print(f"驱动下载失败: {e}")
+        sys.exit(1)
 
 driver.get("https://onlineweb.zhihuishu.com/")
 print("已导航至智慧树学生首页, 请自行登录")
@@ -122,7 +118,6 @@ def check_CAPTCHA():
         pass
 
 
-@reloading
 def ask():
     if not check():
         return
@@ -203,7 +198,6 @@ def ask():
             continue
 
 
-@reloading
 def answer():
     if not check():
         return
