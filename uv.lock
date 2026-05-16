@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 
 [[package]]
@@ -380,15 +380,6 @@ wheels = [
 ]
 
 [[package]]
-name = "reloading"
-version = "1.1.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/92/3c/25a5fdbac9d02fd80ed389e5310469925f82a975b84880e705cd29399528/reloading-1.1.2.tar.gz", hash = "sha256:8c28fc66f458a795ea63f543f4282b14de45b7158cc53b1f895057f5308fca95", size = 8350, upload-time = "2021-09-19T15:49:33.52Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/bf/eb3c71de08b6f8020cb7742e43a703f42d9591952f4a1ef40925be4b4097/reloading-1.1.2-py3-none-any.whl", hash = "sha256:fd5eaa08c6dd85e4dc76b13d7ff7ab6fdc39997e40e320b0faf2bc76dcb85308", size = 8488, upload-time = "2021-09-19T15:49:31.163Z" },
-]
-
-[[package]]
 name = "requests"
 version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
@@ -557,7 +548,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "openai" },
-    { name = "reloading" },
+    { name = "python-dotenv" },
     { name = "selenium" },
     { name = "webdriver-manager" },
 ]
@@ -565,7 +556,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "openai", specifier = ">=1.84.0" },
-    { name = "reloading", specifier = ">=1.1.2" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "selenium", specifier = ">=4.33.0" },
     { name = "webdriver-manager", specifier = ">=4.0.2" },
 ]

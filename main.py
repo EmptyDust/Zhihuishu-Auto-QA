@@ -2,7 +2,9 @@
 import time
 import sys
 import os
+import platform
 import random
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,6 +31,10 @@ api_key = os.getenv("API_KEY")
 base_url = os.getenv("BASE_URL")
 model_name = os.getenv("MODEL_NAME")
 
+if not api_key or api_key == "your_api_key_here" or not base_url or not model_name:
+    print("请先在 .env 中配置 API_KEY、BASE_URL、MODEL_NAME")
+    sys.exit(1)
+
 print("正在启动浏览器")
 options = Options()
 options.add_argument("--disable-logging")
@@ -42,13 +48,21 @@ else:
     local_driver_name = "msedgedriver"
     log_path = "/dev/null"
 
-driver_path = os.path.join(os.path.dirname(__file__), local_driver_name)
+script_dir = os.path.dirname(__file__)
+driver_path = os.path.join(script_dir, local_driver_name)
+windows_driver_path = os.path.join(script_dir, "msedgedriver.exe")
+
+if sys.platform != 'win32' and os.path.exists(windows_driver_path):
+    print(f"检测到 Windows 驱动但当前系统不能使用: {windows_driver_path}")
+    print(f"当前系统: {sys.platform} {platform.machine()}, 请放置对应平台的 {local_driver_name}")
 
 # 先尝试本地驱动，失败则联网下载
 driver = None
 if os.path.exists(driver_path):
     try:
         print(f"尝试使用本地驱动: {driver_path}")
+        if sys.platform != 'win32' and not os.access(driver_path, os.X_OK):
+            os.chmod(driver_path, os.stat(driver_path).st_mode | 0o111)
         driver = Edge(service=Service(executable_path=driver_path, log_path=log_path), options=options)
         print("本地驱动加载成功")
     except Exception as e:
@@ -58,17 +72,34 @@ if os.path.exists(driver_path):
 if driver is None:
     print("正在联网下载驱动...")
     proxy = os.getenv("PROXY")
+    original_all_proxy = os.environ.get('all_proxy')
+    original_all_proxy_upper = os.environ.get('ALL_PROXY')
     if proxy:
         os.environ['http_proxy'] = proxy
         os.environ['https_proxy'] = proxy
+        parsed_proxy = urlparse(proxy)
+        if parsed_proxy.hostname and parsed_proxy.port:
+            os.environ['all_proxy'] = f"socks5://{parsed_proxy.hostname}:{parsed_proxy.port}"
         print(f"使用代理: {proxy}")
     try:
-        driver_path = EdgeChromiumDriverManager().install()
+        driver_path = EdgeChromiumDriverManager(
+            url="https://msedgedriver.microsoft.com",
+            latest_release_url="https://msedgedriver.microsoft.com/LATEST_RELEASE",
+        ).install()
         driver = Edge(service=Service(executable_path=driver_path, log_path=log_path), options=options)
         print("驱动下载并加载成功")
     except Exception as e:
         print(f"驱动下载失败: {e}")
         sys.exit(1)
+    finally:
+        if original_all_proxy is None:
+            os.environ.pop('all_proxy', None)
+        else:
+            os.environ['all_proxy'] = original_all_proxy
+        if original_all_proxy_upper is None:
+            os.environ.pop('ALL_PROXY', None)
+        else:
+            os.environ['ALL_PROXY'] = original_all_proxy_upper
 
 driver.get("https://onlineweb.zhihuishu.com/")
 print("已导航至智慧树学生首页, 请自行登录")
@@ -114,6 +145,40 @@ def check_CAPTCHA():
         time.sleep(0.5)
         driver.find_element(By.CLASS_NAME, "yidun_modal")
         input("出现验证码, 请手动完成后按回车键继续")
+    except Exception:
+        pass
+
+
+def js_click(element):
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();",
+        element,
+    )
+
+
+def js_set_textarea(textarea, text):
+    driver.execute_script(
+        """
+        const textarea = arguments[0];
+        const text = arguments[1];
+        const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            'value'
+        ).set;
+        setter.call(textarea, text);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        """,
+        textarea,
+        text,
+    )
+
+
+def keep_browser_in_background():
+    if sys.platform != 'darwin':
+        return
+    try:
+        driver.minimize_window()
     except Exception:
         pass
 
@@ -180,11 +245,11 @@ def ask():
             if not check():
                 print(f"无法找到问答页面，跳过问题: {question}")
                 continue
-            WebDriverWait(driver, 2.5).until(EC.element_to_be_clickable((By.CLASS_NAME, "ask-btn"))).click()  # 打开输入框
-            WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.TAG_NAME, "textarea"))).send_keys(question)
+            js_click(WebDriverWait(driver, 2.5).until(EC.element_to_be_clickable((By.CLASS_NAME, "ask-btn"))))  # 打开输入框
+            js_set_textarea(WebDriverWait(driver, 1.5).until(EC.presence_of_element_located((By.TAG_NAME, "textarea"))), question)
             check_CAPTCHA()
             time.sleep(2)
-            WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".up-btn.ZHIHUISHU_QZMD.set-btn"))).click()
+            js_click(WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".up-btn.ZHIHUISHU_QZMD.set-btn"))))
             check_CAPTCHA()
             print(f"成功提问: {question}")
             time.sleep(delay)
@@ -268,6 +333,7 @@ def answer():
             pass
         case _:
             return
+    keep_browser_in_background()
     ori_page = driver.current_window_handle
     for answer, question, delay in zip(answers_list, question_title, delay_times):
         try:
@@ -276,28 +342,31 @@ def answer():
                 print(f"无法找到问答页面，跳过问题: {question}")
                 continue
             window_handles_before = driver.window_handles
-            driver.find_element(By.XPATH, f'//div[@title="{question}"]').click()
+            js_click(driver.find_element(By.XPATH, f'//div[@title="{question}"]'))
             time.sleep(1)
             window_handles_after = driver.window_handles
             for window in window_handles_after:
                 if window not in window_handles_before:
                     new_page = window
             driver.switch_to.window(new_page)
+            keep_browser_in_background()
             try:
-                WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.CLASS_NAME, "my-answer-btn"))).click()  # 打开输入框
+                js_click(WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.CLASS_NAME, "my-answer-btn"))))  # 打开输入框
             except Exception:
                 print(f"本题无法回答, 可能是已经回答过, 题目: {question}")
                 driver.close()
                 driver.switch_to.window(ori_page)
+                keep_browser_in_background()
                 continue
-            WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.TAG_NAME, "textarea"))).send_keys(answer)
+            js_set_textarea(WebDriverWait(driver, 1.5).until(EC.presence_of_element_located((By.TAG_NAME, "textarea"))), answer)
             check_CAPTCHA()
             time.sleep(2)
-            WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".up-btn.ZHIHUISHU_QZMD.set-btn"))).click()
+            js_click(WebDriverWait(driver, 1.5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".up-btn.ZHIHUISHU_QZMD.set-btn"))))
             check_CAPTCHA()
             print(f"成功回答问题: {question}")
             driver.close()
             driver.switch_to.window(ori_page)
+            keep_browser_in_background()
             time.sleep(delay)
         except Exception as e:
             print(f"回答问题失败: {question}")
